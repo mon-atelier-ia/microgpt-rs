@@ -1,7 +1,9 @@
+#![allow(clippy::needless_range_loop)] // multi-array indexed loops in numerical code
+
 use crate::config::ModelConfig;
+use crate::forward::{DKvCache, PosCache};
 use crate::model::Params;
-use crate::forward::PosCache;
-use crate::ops::{zeros, linear_bwd_w, linear_bwd_x, rmsnorm_bwd};
+use crate::ops::{linear_bwd_w, linear_bwd_x, rmsnorm_bwd, zeros};
 
 pub(crate) fn backward(
     w: &Params,
@@ -9,10 +11,10 @@ pub(crate) fn backward(
     c: &PosCache,
     target: usize,
     seq_len: usize,
-    d_kv_cache: &mut Vec<(Vec<Vec<f32>>, Vec<Vec<f32>>)>,
+    d_kv_cache: &mut [<DKvCache as IntoIterator>::Item],
     cfg: &ModelConfig,
 ) {
-    let e  = cfg.n_embd;
+    let e = cfg.n_embd;
     let hd = cfg.head_dim();
     let nh = cfg.n_head;
     let bs = cfg.block_size;
@@ -25,7 +27,11 @@ pub(crate) fn backward(
     d_logits.iter_mut().for_each(|v| *v *= norm);
 
     // lm_head (weight-tied wte)
-    let last_x = if cfg.n_layer > 0 { &c.layers[cfg.n_layer - 1].x_post_mlp } else { &c.x0 };
+    let last_x = if cfg.n_layer > 0 {
+        &c.layers[cfg.n_layer - 1].x_post_mlp
+    } else {
+        &c.x0
+    };
     linear_bwd_w(&mut g.wte, &d_logits, last_x, vs, e);
     let mut dx = zeros(e);
     linear_bwd_x(&mut dx, &d_logits, &w.wte, vs, e);
@@ -43,8 +49,11 @@ pub(crate) fn backward(
         let mut d_h1a = zeros(4 * e);
         linear_bwd_w(&mut lg.fc2, &dx, &lc.h1a, e, 4 * e);
         linear_bwd_x(&mut d_h1a, &dx, &lw.fc2, e, 4 * e);
-        let d_h1: Vec<f32> = d_h1a.iter().zip(&lc.h1)
-            .map(|(da, h)| if *h > 0.0 { da * 2.0 * h } else { 0.0 }).collect();
+        let d_h1: Vec<f32> = d_h1a
+            .iter()
+            .zip(&lc.h1)
+            .map(|(da, h)| if *h > 0.0 { da * 2.0 * h } else { 0.0 })
+            .collect();
         let mut d_xn_mlp = zeros(e);
         linear_bwd_w(&mut lg.fc1, &d_h1, &lc.xn_mlp, 4 * e, e);
         linear_bwd_x(&mut d_xn_mlp, &d_h1, &lw.fc1, 4 * e, e);
@@ -59,22 +68,31 @@ pub(crate) fn backward(
 
         let mut d_q = zeros(e);
         for h in 0..nh {
-            let aw_h  = &ac.aw[h];
+            let aw_h = &ac.aw[h];
             let scale = (hd as f32).sqrt();
 
             // gradient into value vectors
             for t in 0..t_len {
                 let dv = &mut d_kv_cache[l].1[t];
-                for i in 0..hd { dv[h * hd + i] += aw_h[t] * d_ho[h * hd + i]; }
+                for i in 0..hd {
+                    dv[h * hd + i] += aw_h[t] * d_ho[h * hd + i];
+                }
             }
 
             // gradient into attention weights
-            let d_aw_logits_raw: Vec<f32> = (0..t_len).map(|t| {
-                (0..hd).map(|i| d_ho[h * hd + i] * ac.all_v[t][h * hd + i]).sum::<f32>()
-            }).collect();
+            let d_aw_logits_raw: Vec<f32> = (0..t_len)
+                .map(|t| {
+                    (0..hd)
+                        .map(|i| d_ho[h * hd + i] * ac.all_v[t][h * hd + i])
+                        .sum::<f32>()
+                })
+                .collect();
             let dot_aw: f32 = aw_h.iter().zip(&d_aw_logits_raw).map(|(a, b)| a * b).sum();
-            let d_attn_logits: Vec<f32> = aw_h.iter().zip(&d_aw_logits_raw)
-                .map(|(a, d)| a * (d - dot_aw)).collect();
+            let d_attn_logits: Vec<f32> = aw_h
+                .iter()
+                .zip(&d_aw_logits_raw)
+                .map(|(a, d)| a * (d - dot_aw))
+                .collect();
 
             // d_q
             for t in 0..t_len {
@@ -97,8 +115,8 @@ pub(crate) fn backward(
         let dk_cur = &d_kv_cache[l].0[cur_t];
         let dv_cur = &d_kv_cache[l].1[cur_t];
         let mut d_xn_attn = zeros(e);
-        linear_bwd_w(&mut lg.wq, &d_q,   &lc.xn_attn, e, e);
-        linear_bwd_x(&mut d_xn_attn, &d_q,   &lw.wq, e, e);
+        linear_bwd_w(&mut lg.wq, &d_q, &lc.xn_attn, e, e);
+        linear_bwd_x(&mut d_xn_attn, &d_q, &lw.wq, e, e);
         linear_bwd_w(&mut lg.wk, dk_cur, &lc.xn_attn, e, e);
         linear_bwd_x(&mut d_xn_attn, dk_cur, &lw.wk, e, e);
         linear_bwd_w(&mut lg.wv, dv_cur, &lc.xn_attn, e, e);
@@ -109,6 +127,13 @@ pub(crate) fn backward(
     }
 
     // Embedding gradients
-    for i in 0..e { g.wte[c.tok_id * e + i] += dx[i]; }
-    for i in 0..e { g.wpe[(c.pos_id % bs) * e + i] += dx[i]; }
+    let wte_g = &mut g.wte[c.tok_id * e..(c.tok_id + 1) * e];
+    for (g_i, &dx_i) in wte_g.iter_mut().zip(&dx) {
+        *g_i += dx_i;
+    }
+    let pos = c.pos_id % bs;
+    let wpe_g = &mut g.wpe[pos * e..(pos + 1) * e];
+    for (g_i, &dx_i) in wpe_g.iter_mut().zip(&dx) {
+        *g_i += dx_i;
+    }
 }
