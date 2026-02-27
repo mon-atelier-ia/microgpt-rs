@@ -6,3 +6,7 @@ description = "Minimal GPT library in pure Rust — based on Karpathy's microgpt
 license = "MIT"
 keywords = ["gpt", "transformer", "zero-dependency", "machine-learning"]
 categories = ["science", "algorithms"]
+
+[[bin]]
+name = "demo"
+path = "src/bin/demo.rs"
