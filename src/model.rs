@@ -4,10 +4,10 @@ use crate::rng::Rng;
 
 #[derive(Clone)]
 pub struct LayerParams {
-    pub wq:  Vec<f32>, // [n_embd, n_embd]
-    pub wk:  Vec<f32>,
-    pub wv:  Vec<f32>,
-    pub wo:  Vec<f32>,
+    pub wq: Vec<f32>, // [n_embd, n_embd]
+    pub wk: Vec<f32>,
+    pub wv: Vec<f32>,
+    pub wo: Vec<f32>,
     pub fc1: Vec<f32>, // [4*n_embd, n_embd]
     pub fc2: Vec<f32>, // [n_embd, 4*n_embd]
 }
@@ -16,25 +16,36 @@ impl LayerParams {
     fn new_random(rng: &mut Rng, cfg: &ModelConfig) -> Self {
         let e = cfg.n_embd;
         Self {
-            wq:  mat_rand(e, e, rng, 0.02),
-            wk:  mat_rand(e, e, rng, 0.02),
-            wv:  mat_rand(e, e, rng, 0.02),
-            wo:  zeros(e * e),                   // zero-init (matches Karpathy)
+            wq: mat_rand(e, e, rng, 0.02),
+            wk: mat_rand(e, e, rng, 0.02),
+            wv: mat_rand(e, e, rng, 0.02),
+            wo: zeros(e * e), // zero-init (matches Karpathy)
             fc1: mat_rand(4 * e, e, rng, 0.02),
-            fc2: zeros(e * 4 * e),               // zero-init (matches Karpathy)
+            fc2: zeros(e * 4 * e), // zero-init (matches Karpathy)
         }
     }
 
     fn new_zeros(cfg: &ModelConfig) -> Self {
         let e = cfg.n_embd;
         Self {
-            wq: zeros(e * e), wk: zeros(e * e), wv: zeros(e * e), wo: zeros(e * e),
-            fc1: zeros(4 * e * e), fc2: zeros(e * 4 * e),
+            wq: zeros(e * e),
+            wk: zeros(e * e),
+            wv: zeros(e * e),
+            wo: zeros(e * e),
+            fc1: zeros(4 * e * e),
+            fc2: zeros(e * 4 * e),
         }
     }
 
     fn zero_fill(&mut self) {
-        for v in [&mut self.wq, &mut self.wk, &mut self.wv, &mut self.wo, &mut self.fc1, &mut self.fc2] {
+        for v in [
+            &mut self.wq,
+            &mut self.wk,
+            &mut self.wv,
+            &mut self.wo,
+            &mut self.fc1,
+            &mut self.fc2,
+        ] {
             v.iter_mut().for_each(|x| *x = 0.0);
         }
     }
@@ -52,7 +63,9 @@ impl Params {
         Self {
             wte: mat_rand(vocab_size, cfg.n_embd, rng, 0.02),
             wpe: mat_rand(cfg.block_size, cfg.n_embd, rng, 0.02),
-            layers: (0..cfg.n_layer).map(|_| LayerParams::new_random(rng, cfg)).collect(),
+            layers: (0..cfg.n_layer)
+                .map(|_| LayerParams::new_random(rng, cfg))
+                .collect(),
         }
     }
 
@@ -60,7 +73,9 @@ impl Params {
         Self {
             wte: zeros(vocab_size * cfg.n_embd),
             wpe: zeros(cfg.block_size * cfg.n_embd),
-            layers: (0..cfg.n_layer).map(|_| LayerParams::new_zeros(cfg)).collect(),
+            layers: (0..cfg.n_layer)
+                .map(|_| LayerParams::new_zeros(cfg))
+                .collect(),
         }
     }
 
@@ -107,11 +122,17 @@ impl Model {
 
     pub fn adam_step(&mut self, step: usize, tc: &TrainConfig) {
         let decay = 1.0 - step as f32 / tc.n_steps as f32;
-        let lr_t = tc.lr * decay
-            * (1.0 - tc.beta2.powi(step as i32)).sqrt()
+        let lr_t = tc.lr * decay * (1.0 - tc.beta2.powi(step as i32)).sqrt()
             / (1.0 - tc.beta1.powi(step as i32));
 
-        fn update(w: &mut [f32], g: &[f32], m: &mut [f32], v: &mut [f32], lr_t: f32, tc: &TrainConfig) {
+        fn update(
+            w: &mut [f32],
+            g: &[f32],
+            m: &mut [f32],
+            v: &mut [f32],
+            lr_t: f32,
+            tc: &TrainConfig,
+        ) {
             for i in 0..w.len() {
                 m[i] = tc.beta1 * m[i] + (1.0 - tc.beta1) * g[i];
                 v[i] = tc.beta2 * v[i] + (1.0 - tc.beta2) * g[i] * g[i];
@@ -119,17 +140,65 @@ impl Model {
             }
         }
 
-        let Self { ref mut w, ref g, ref mut m, ref mut v, .. } = *self;
+        let Self {
+            ref mut w,
+            ref g,
+            ref mut m,
+            ref mut v,
+            ..
+        } = *self;
 
         update(&mut w.wte, &g.wte, &mut m.wte, &mut v.wte, lr_t, tc);
         update(&mut w.wpe, &g.wpe, &mut m.wpe, &mut v.wpe, lr_t, tc);
         for l in 0..w.layers.len() {
-            update(&mut w.layers[l].wq,  &g.layers[l].wq,  &mut m.layers[l].wq,  &mut v.layers[l].wq,  lr_t, tc);
-            update(&mut w.layers[l].wk,  &g.layers[l].wk,  &mut m.layers[l].wk,  &mut v.layers[l].wk,  lr_t, tc);
-            update(&mut w.layers[l].wv,  &g.layers[l].wv,  &mut m.layers[l].wv,  &mut v.layers[l].wv,  lr_t, tc);
-            update(&mut w.layers[l].wo,  &g.layers[l].wo,  &mut m.layers[l].wo,  &mut v.layers[l].wo,  lr_t, tc);
-            update(&mut w.layers[l].fc1, &g.layers[l].fc1, &mut m.layers[l].fc1, &mut v.layers[l].fc1, lr_t, tc);
-            update(&mut w.layers[l].fc2, &g.layers[l].fc2, &mut m.layers[l].fc2, &mut v.layers[l].fc2, lr_t, tc);
+            update(
+                &mut w.layers[l].wq,
+                &g.layers[l].wq,
+                &mut m.layers[l].wq,
+                &mut v.layers[l].wq,
+                lr_t,
+                tc,
+            );
+            update(
+                &mut w.layers[l].wk,
+                &g.layers[l].wk,
+                &mut m.layers[l].wk,
+                &mut v.layers[l].wk,
+                lr_t,
+                tc,
+            );
+            update(
+                &mut w.layers[l].wv,
+                &g.layers[l].wv,
+                &mut m.layers[l].wv,
+                &mut v.layers[l].wv,
+                lr_t,
+                tc,
+            );
+            update(
+                &mut w.layers[l].wo,
+                &g.layers[l].wo,
+                &mut m.layers[l].wo,
+                &mut v.layers[l].wo,
+                lr_t,
+                tc,
+            );
+            update(
+                &mut w.layers[l].fc1,
+                &g.layers[l].fc1,
+                &mut m.layers[l].fc1,
+                &mut v.layers[l].fc1,
+                lr_t,
+                tc,
+            );
+            update(
+                &mut w.layers[l].fc2,
+                &g.layers[l].fc2,
+                &mut m.layers[l].fc2,
+                &mut v.layers[l].fc2,
+                lr_t,
+                tc,
+            );
         }
     }
 }

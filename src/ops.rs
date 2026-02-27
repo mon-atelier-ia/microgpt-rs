@@ -10,7 +10,14 @@ pub(crate) fn zeros(n: usize) -> Vec<f32> {
 
 /// y = x @ W^T   x:[inp]  W:[out, inp]  → y:[out]
 pub(crate) fn linear(x: &[f32], w: &[f32], out: usize, inp: usize) -> Vec<f32> {
-    (0..out).map(|o| x.iter().zip(&w[o * inp..(o + 1) * inp]).map(|(a, b)| a * b).sum()).collect()
+    (0..out)
+        .map(|o| {
+            x.iter()
+                .zip(&w[o * inp..(o + 1) * inp])
+                .map(|(a, b)| a * b)
+                .sum()
+        })
+        .collect()
 }
 
 pub(crate) fn linear_bwd_w(dw: &mut [f32], dy: &[f32], x: &[f32], out: usize, inp: usize) {
@@ -44,5 +51,8 @@ pub(crate) fn rmsnorm(x: &[f32]) -> (Vec<f32>, f32) {
 pub(crate) fn rmsnorm_bwd(dy: &[f32], x: &[f32], ri: f32) -> Vec<f32> {
     let n = x.len() as f32;
     let dot: f32 = dy.iter().zip(x).map(|(a, b)| a * b).sum();
-    dy.iter().zip(x).map(|(dy_i, x_i)| ri * dy_i - (ri * ri * ri / n) * dot * x_i).collect()
+    dy.iter()
+        .zip(x)
+        .map(|(dy_i, x_i)| ri * dy_i - (ri * ri * ri / n) * dot * x_i)
+        .collect()
 }

@@ -1,10 +1,10 @@
 pub mod config;
-pub mod rng;
 pub mod data;
-pub mod model;
-pub mod train;
 pub mod inference;
+pub mod model;
+pub mod rng;
+pub mod train;
 
-mod ops;
-mod forward;
 mod backward;
+mod forward;
+mod ops;
