@@ -1,13 +1,16 @@
-# zeroclawgpt 🦀⚡
+# microgpt-rs
 
-> Zero-dependency GPT in pure Rust — a faithful port of Karpathy's microGPT.py that trains ~4,500x faster.
+> Minimal GPT **library** in pure Rust — zero dependencies, based on Karpathy's [microgpt.py](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95).
 
-A complete, from-scratch GPT implementation in a single Rust file. No crates. No `ndarray`. No `rand`. No `serde`. Just `std` — and it generates real human names after training for less than a second.
+A complete, from-scratch GPT restructured as a reusable Rust crate. Forward pass, analytical backward pass, Adam optimizer, character-level tokenizer — all in `std` only. Trains on 92 baby names and generates real human names in under a second.
 
 ```
-step     0  loss=3.2943  | m<BOS>kv<BOS>tpl  kygocwfv  vydcdhlm
-step  2500  loss=2.1965  | logan  leo  lagan
-step  4999  loss=0.6869  | naomi  eleanora  ryan
+microgpt-rs  vocab=27  params=3632  layers=1  embd=16  heads=4
+Training 5000 steps
+
+step     0  loss=3.2943  t=0.00s  | m<BOS>kv<BOS>tpl  kygocwfv  vydcdhlm
+step  2500  loss=2.1965  t=0.16s  | logan  leo  lagan
+step  4999  loss=0.6869  t=0.69s  | naomi  eleanora  ryan
 
 Done in 0.689s
 ```
@@ -16,28 +19,15 @@ Done in 0.689s
 
 ## Table of Contents
 
-- [Why This Exists](#why-this-exists)
 - [Quick Start](#quick-start)
-- [How It Works](#how-it-works)
+- [Library Usage](#library-usage)
 - [Architecture](#architecture)
+- [Module Map](#module-map)
 - [Hyperparameters](#hyperparameters)
-- [Training Output](#training-output)
 - [Performance](#performance)
-- [5 Bugs We Fixed](#5-bugs-we-fixed)
-- [Why Zero Dependencies](#why-zero-dependencies)
-- [Code Tour](#code-tour)
-- [Extending It](#extending-it)
+- [Origin & Bug Fixes](#origin--bug-fixes)
+- [Roadmap](#roadmap)
 - [License](#license)
-
----
-
-## Why This Exists
-
-Andrej Karpathy released [microGPT.py](https://github.com/karpathy/microgpt) — a minimal GPT that fits in ~200 lines of Python with a custom scalar autograd engine. It trains on a list of baby names and learns to generate new ones.
-
-We ported it to Rust. Faithfully. Then we read his actual source code carefully and found 5 meaningful differences in our implementation. Fixing them took us from generating `ioeanaa` to generating `naomi`.
-
-The result: **474 lines of Rust, zero dependencies, 3,632 parameters, and a ~4,500x speedup over Python.**
 
 ---
 
@@ -47,71 +37,75 @@ The result: **474 lines of Rust, zero dependencies, 3,632 parameters, and a ~4,5
 
 - [Rust](https://rustup.rs/) (1.56+ for edition 2021)
 
-### Build & Run
+### Run the demo
 
 ```bash
-git clone https://github.com/rustystack/zeroclawgpt.git
-cd zeroclawgpt
-cargo build --release
-./target/release/zeroclawgpt
+git clone https://github.com/mon-atelier-ia/microgpt-rs.git
+cd microgpt-rs
+cargo run --release --bin demo
 ```
 
-That's it. No data files to download — the training data (92 baby names) is embedded in the source.
+### Run the tests
 
-### What You'll See
-
+```bash
+cargo test --release
 ```
-zeroclawgpt v2  vocab=27  params=3632  layers=1  embd=16  heads=4
-Fixes: KV-cache causal attn | LR linear decay | beta2=0.95 | zero-init wo/fc2
-Training 5000 steps
-
-step     0  loss=3.2943  t=0.00s  | sample 0: m<BOS>kv<BOS>tpl  sample 1: kygocwfv  ...
-step   500  loss=2.3344  t=0.07s  | sample 0: eyy  sample 1: iyne  ...
-step  1000  loss=2.3421  t=0.14s  | sample 0: rarloeba  sample 1: alievy  ...
-step  2000  loss=1.6842  t=0.27s  | sample 0: lmye  sample 1: rync  sample 2: luke  ...
-step  3000  loss=1.0547  t=0.41s  | sample 0: carey  sample 1: gadrel  ...
-step  4000  loss=1.2236  t=0.55s  | sample 0: jaden  sample 1: caleb  sample 2: axel  ...
-step  4999  loss=0.6869  t=0.69s  | sample 0: naomi  sample 1: eleanora  sample 2: ryan  ...
-
-Done in 0.689s
-```
-
-Watch the samples evolve from random noise → plausible letter combos → real names.
 
 ---
 
-## How It Works
+## Library Usage
 
-### The Task
+microgpt-rs is a library crate — import it in your own project:
 
-Given a dataset of 92 names (`emma`, `oliver`, `luna`, `axel`, ...), train a tiny transformer to predict the next character. At inference time, feed it a `<BOS>` (beginning of sequence) token and let it generate characters one by one until it produces `<EOS>` (end of sequence).
-
-### The Training Loop
-
-Each of the 5,000 training steps:
-
-1. **Pick a name** — cycle through the 92 names round-robin
-2. **Tokenize** — convert to `[<BOS>, c1, c2, ..., <EOS>]` (character-level, max 8 tokens)
-3. **Forward** — process each token position through the transformer, building up a KV cache so each position attends to all previous positions (causal attention)
-4. **Loss** — cross-entropy: for each position, how surprised was the model by the actual next character?
-5. **Backward** — compute analytical gradients for every parameter (no autograd graph)
-6. **Update** — Adam optimizer with linear learning rate decay
-
-### Inference
-
-Generation is autoregressive:
-
-```
-Input:  <BOS>
-Step 1: <BOS> → predict 'n' → "n"
-Step 2: <BOS>, n → predict 'a' → "na"
-Step 3: <BOS>, n, a → predict 'o' → "nao"
-Step 4: <BOS>, n, a, o → predict 'm' → "naom"
-Step 5: <BOS>, n, a, o, m → predict 'i' → "naomi"
-Step 6: <BOS>, n, a, o, m, i → predict <EOS> → done!
+```toml
+# Cargo.toml
+[dependencies]
+microgpt-rs = { git = "https://github.com/mon-atelier-ia/microgpt-rs.git" }
 ```
 
-Each step, the model sees all previous characters via the KV cache and predicts the next one.
+```rust
+use microgpt_rs::config::{ModelConfig, TrainConfig};
+use microgpt_rs::data::{build_vocab, tokenize};
+use microgpt_rs::inference::generate;
+use microgpt_rs::model::Model;
+use microgpt_rs::rng::Rng;
+use microgpt_rs::train::train_step;
+
+fn main() {
+    let mc = ModelConfig::default();
+    let tc = TrainConfig::default();
+    let mut rng = Rng::new(42);
+
+    let docs = vec!["emma", "olivia", "liam", "noah", "luna"];
+    let vocab = build_vocab(&docs);
+    let mut model = Model::new(vocab.size(), &mut rng, mc);
+
+    // Train
+    for step in 0..tc.n_steps {
+        let doc = docs[step % docs.len()];
+        let tokens = tokenize(doc, &vocab, mc.block_size);
+        let loss = train_step(&mut model, &tokens, step, &tc);
+        if step % 1000 == 0 {
+            println!("step {step}  loss={loss:.4}");
+        }
+    }
+
+    // Generate
+    let samples = generate(&model.w, &vocab, &mut rng, &mc, 5);
+    println!("{}", samples.join("  "));
+}
+```
+
+### Public API
+
+| Module | Key exports | Purpose |
+|--------|------------|---------|
+| `config` | `ModelConfig`, `TrainConfig` | All hyperparameters as configurable structs |
+| `model` | `Model`, `Params`, `LayerParams` | Weight storage, gradient buffers, Adam optimizer |
+| `train` | `train_step()` | Atomic training step: forward + backward + Adam |
+| `inference` | `generate()` | Autoregressive name generation |
+| `data` | `Vocab`, `build_vocab()`, `tokenize()` | Character-level tokenizer |
+| `rng` | `Rng` | xoshiro128+ PRNG with gaussian & categorical sampling |
 
 ---
 
@@ -158,9 +152,40 @@ pos_id   ──→ wpe[pos]  ─┘
 
 Key design choices (matching Karpathy's implementation):
 - **RMSNorm** instead of LayerNorm (no bias, no learnable scale)
-- **Squared ReLU** activation in the MLP (`max(0, x)²`)
-- **Weight tying** — the output projection reuses the token embedding matrix
+- **Squared ReLU** activation (`max(0, x)^2`)
+- **Weight tying** — output projection reuses the token embedding matrix
 - **Zero-initialized** output projections (Wo, Wfc2) — residual stream starts as identity
+- **Analytical gradients** — no autograd graph, hand-derived matrix gradients (~4,580x faster than Python's scalar autograd)
+
+---
+
+## Module Map
+
+```
+src/
+├── lib.rs           # Crate root — public and internal module declarations
+├── config.rs        # ModelConfig (Copy) + TrainConfig
+├── model.rs         # Params, LayerParams, Model (weights + grad + Adam state)
+├── forward.rs       # Forward pass with KV cache, PosCache, AttnCtx
+├── backward.rs      # Analytical gradients through every operation
+├── train.rs         # train_step() — atomic forward → backward → Adam
+├── inference.rs     # generate() — autoregressive sampling
+├── data.rs          # Vocab, build_vocab(), tokenize()
+├── rng.rs           # xoshiro128+ PRNG, gaussian, categorical
+├── ops.rs           # linear, softmax, rmsnorm + backward ops
+└── bin/
+    └── demo.rs      # CLI demo using the library's public API
+
+tests/
+└── smoke.rs         # Param count, loss decrease, generation output
+```
+
+### Internal vs Public
+
+| Visibility | Modules |
+|-----------|---------|
+| `pub` (library API) | `config`, `model`, `data`, `train`, `inference`, `rng` |
+| `pub(crate)` (internal) | `forward`, `backward`, `ops` |
 
 ---
 
@@ -168,160 +193,65 @@ Key design choices (matching Karpathy's implementation):
 
 | Parameter | Value | Description |
 |---|---|---|
-| `N_EMBD` | 16 | Embedding dimension |
-| `N_HEAD` | 4 | Number of attention heads |
-| `HEAD_DIM` | 4 | Per-head dimension (`N_EMBD / N_HEAD`) |
-| `N_LAYER` | 1 | Number of transformer blocks |
-| `BLOCK_SIZE` | 8 | Maximum sequence length |
-| `N_STEPS` | 5000 | Training iterations |
-| `LR` | 1e-2 | Initial learning rate |
-| `BETA1` | 0.9 | Adam first moment decay |
-| `BETA2` | 0.95 | Adam second moment decay |
-| LR schedule | linear decay | `LR × (1 - step/N_STEPS)` → decays to 0 |
+| `n_embd` | 16 | Embedding dimension |
+| `n_head` | 4 | Number of attention heads |
+| `head_dim` | 4 | Per-head dimension (`n_embd / n_head`) |
+| `n_layer` | 1 | Number of transformer blocks |
+| `block_size` | 8 | Maximum sequence length |
+| `n_steps` | 5000 | Training iterations |
+| `lr` | 1e-2 | Initial learning rate |
+| `beta1` | 0.9 | Adam first moment decay |
+| `beta2` | 0.95 | Adam second moment decay |
+| LR schedule | linear decay | `lr * (1 - step/n_steps)` |
 
-All values match Karpathy's defaults exactly.
-
----
-
-## Training Output
-
-The model generates 5 samples every 500 steps. Here's what the learning progression looks like:
-
-| Step | Loss | Sample Names | What's Happening |
-|---|---|---|---|
-| 0 | 3.29 | `m<BOS>kv<BOS>tpl` | Random noise — loss ≈ -log(1/27) as expected |
-| 500 | 2.33 | `eyy`, `iyne`, `adee` | Learning vowel/consonant patterns |
-| 1000 | 2.34 | `rarloeba`, `alievy` | Longer sequences, still garbled |
-| 2000 | 1.68 | `luke`, `rync` | First real name appears! |
-| 2500 | 2.20 | `logan`, `leo` | More real names emerging |
-| 3500 | 1.24 | `cole`, `kole` | Variations on learned patterns |
-| 4000 | 1.22 | `jaden`, `caleb`, `axel` | Consistent real names |
-| 4999 | 0.69 | `naomi`, `eleanora`, `ryan` | Strong generation quality |
+All values match Karpathy's defaults. Override via `ModelConfig` and `TrainConfig` structs.
 
 ---
 
 ## Performance
 
-| Metric | Karpathy Python | zeroclawgpt |
+| Metric | Karpathy Python | microgpt-rs |
 |---|---|---|
 | 1000-step training time | 297.7s | **0.065s** |
 | Full 5000-step run | ~25 min | **< 1s** |
-| Speedup | 1× | **~4,580×** |
+| Speedup | 1x | **~4,580x** |
 | Parameters | 3,632 | 3,632 |
-| Final loss | ~2.4 (1000 steps) | **0.69** (5000 steps) |
-| Memory allocations per step | Tens of thousands | Minimal |
+| Final loss (5000 steps) | ~2.4 (1000 steps) | **0.69** |
 
-### Why So Fast?
-
-Karpathy's Python builds a **dynamic computation graph** — every scalar `float` is wrapped in a `Value` object with a `_backward` closure for autograd. At 3,632 parameters, one forward pass creates tens of thousands of heap-allocated nodes that must be topologically sorted and traversed for backprop.
-
-We implement **analytical matrix-level gradients** — the same math, computed directly:
-
-| Operation | Python (autograd) | Rust (analytical) |
-|---|---|---|
-| `c = a + b` | Allocate node + closure | `dc = 1`, applied inline |
-| `softmax → CE` | Chain of exp/sum/log nodes | `d_logits = probs - one_hot` |
-| RMSNorm backward | Graph traversal | 4-line function |
-| Full attention backward | Thousands of nodes | Direct matrix ops |
+The speedup comes from **analytical matrix-level gradients** replacing Python's scalar autograd. No heap-allocated computation graph — just direct gradient formulas.
 
 ---
 
-## 5 Bugs We Fixed
+## Origin & Bug Fixes
 
-We started with a naive port, then read Karpathy's actual source line by line. Five differences emerged:
+This project is a fork of [rustystack/zeroclawgpt](https://github.com/rustystack/zeroclawgpt), restructured from a single 474-line `main.rs` into a modular library crate.
 
-### 1. 🔴 KV Cache — Real Causal Attention (Critical)
+The original zeroclawgpt identified and fixed 5 differences vs Karpathy's gist:
 
-**The bug:** Our v1 processed each position independently. Token at position 3 could only attend to *itself* — not tokens 0, 1, 2. This is fundamentally not a language model.
+1. **KV Cache — Real Causal Attention** (critical) — v1 processed positions independently; v2 accumulates a growing KV cache so each position attends to all previous ones
+2. **Adam beta2: 0.999 → 0.95** — faster adaptation for tiny models
+3. **Linear LR Decay** — prevents overshooting near convergence
+4. **Zero-Init Output Projections** — Wo and Wfc2 start at zero (GPT-2 technique)
+5. **Loss Normalization** — scale gradients by `1/(seq_len-1)` before backward
 
-**The fix:** Accumulate keys and values into a growing cache. At position `t`, the model attends over all positions `[0..t]`, exactly like Karpathy's implementation.
-
-**Impact:** This is the difference between `ioeanaa` and `naomi`.
-
-### 2. 🟡 Adam beta2: 0.999 → 0.95
-
-Lower `beta2` means the optimizer's second moment estimate adapts faster — it forgets old gradient magnitudes more quickly. On a tiny dataset with few training steps, this converges noticeably faster.
-
-### 3. 🟡 Linear LR Decay
-
-**The bug:** Constant learning rate throughout training.
-
-**The fix:** `lr = LR × (1 - step/N_STEPS)`, decaying linearly to zero. Prevents overshooting near convergence.
-
-### 4. 🟡 Zero-Init Output Projections
-
-**The bug:** `Wo` and `Wfc2` initialized with `std=0.02` like other weights.
-
-**The fix:** Initialize to zero. This means at step 0, both the attention and MLP blocks contribute *nothing* — the residual stream is pure identity. The model only starts deviating as gradients flow in. This is the GPT-2 "scaled initialization" technique.
-
-### 5. 🟢 Loss Normalization
-
-**The bug:** Gradients were `(seq_len-1)×` too large — we normalized loss for display but not before the backward pass.
-
-**The fix:** Scale `d_logits` by `1/(seq_len-1)` before backpropagation, matching Karpathy's normalization.
+Full details in [docs/implementation-notes.md](docs/implementation-notes.md).
 
 ---
 
-## Why Zero Dependencies
+## Roadmap
 
-This isn't just a flex. It's the point.
+This crate is the Rust core for the [mon-atelier-ia](https://github.com/mon-atelier-ia) educational GPT ecosystem:
 
-Karpathy's microGPT uses no ML frameworks — no PyTorch, no JAX. Just a tiny autograd engine that fits in the same file. The beauty is seeing every piece of a GPT laid bare with nothing hidden.
+| Target | Approach | Status |
+|--------|----------|--------|
+| Library restructuring | Split `main.rs` into modules | Done |
+| WASM bindings | `wasm-bindgen` / `wasm-pack` sub-crate | Planned |
+| Android bindings | UniFFI or JNI sub-crate | Planned |
+| French datasets | Port from microgpt-ts-fr | Planned |
+| Integration with [microgpt-ts-fr](https://github.com/mon-atelier-ia/microgpt-ts-fr) | WASM replaces TS engine | Planned |
+| Integration with [microgpt-visualizer-fr](https://github.com/mon-atelier-ia/microgpt-visualizer-fr) | WASM for fast forward pass | Planned |
 
-We carry that philosophy to Rust:
-
-- **PRNG** — xoshiro128+ in 15 lines, with Box-Muller gaussian sampling
-- **Linear algebra** — row-major matrix multiply, element-wise ops
-- **Optimizer** — Adam with bias correction, implemented directly
-- **Gradients** — analytical, not autograd. Every backward function is hand-derived
-
-Python's `random` module is ~2,000 lines of C that Karpathy doesn't count. We don't count our 15-line PRNG either. Fair's fair.
-
-**The entire model — forward pass, backward pass, optimizer, data loading, inference — is one file you can read top to bottom in 20 minutes.**
-
----
-
-## Code Tour
-
-The source (`src/main.rs`) is organized in sections:
-
-| Lines | Section | What It Does |
-|---|---|---|
-| 1–10 | Header | Constants, imports |
-| 11–18 | Hyperparameters | All tuneable values in one place |
-| 20–50 | PRNG | xoshiro128+ RNG, gaussian sampling, categorical sampler |
-| 52–85 | Matrix ops | `linear()`, `softmax()`, `rmsnorm()` and their backward passes |
-| 87–140 | Model struct | Parameter storage, gradient buffers, Adam optimizer |
-| 142–180 | Activation cache | Per-position saved state for backward pass |
-| 182–260 | Forward pass | Embeddings → attention with KV cache → MLP → logits |
-| 262–360 | Backward pass | Analytical gradients through every operation |
-| 362–395 | Data & vocab | Baby names dataset, character-level tokenizer |
-| 397–420 | Inference | Autoregressive generation with KV cache |
-| 422–475 | Main | Training loop with logging |
-
-### Key functions
-
-- **`forward()`** — processes one token position, appends to KV cache, returns cached activations
-- **`backward()`** — computes gradients for one position, accumulates cross-position KV gradients via `d_kv_cache`
-- **`rmsnorm()` / `rmsnorm_bwd()`** — forward and backward for RMS normalization
-- **`linear()` / `linear_bwd_w()` / `linear_bwd_x()`** — matrix multiply and its two gradient components
-- **`generate()`** — autoregressive sampling with fresh KV cache per name
-
----
-
-## Extending It
-
-Ideas for building on this (roughly ordered by complexity):
-
-| Extension | Difficulty | Description |
-|---|---|---|
-| CLI arguments | Easy | Add `--steps`, `--lr`, `--layers` via `std::env::args()` |
-| Fetch `names.txt` | Easy | Download Karpathy's full dataset via `std::net::TcpStream` (still zero deps) |
-| Checkpoint save/load | Easy | Write/read raw `f32` bytes via `std::fs` |
-| Batched training | Medium | `[B, seq, embd]` tensors to amortize fixed overhead |
-| SIMD matmul | Medium | `#[target_feature(enable = "avx2")]` on `linear()`, expect 4-8× speedup |
-| Gradient checkpointing | Medium | Recompute activations in backward for larger `N_LAYER` |
-| Multi-layer scaling | Hard | Test with `N_EMBD=64`, `N_LAYER=4` — verify correctness at scale |
+See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 
 ---
 
@@ -332,5 +262,5 @@ Ideas for building on this (roughly ordered by complexity):
 ---
 
 <p align="center">
-  Built by <a href="https://github.com/rustystack">rustystack</a> 🦀
+  Fork of <a href="https://github.com/rustystack/zeroclawgpt">rustystack/zeroclawgpt</a>, restructured by <a href="https://github.com/mon-atelier-ia">mon-atelier-ia</a>
 </p>
