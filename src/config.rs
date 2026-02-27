@@ -15,7 +15,12 @@ impl ModelConfig {
 
 impl Default for ModelConfig {
     fn default() -> Self {
-        Self { n_embd: 16, n_head: 4, n_layer: 1, block_size: 8 }
+        Self {
+            n_embd: 16,
+            n_head: 4,
+            n_layer: 1,
+            block_size: 8,
+        }
     }
 }
 
@@ -31,6 +36,12 @@ pub struct TrainConfig {
 
 impl Default for TrainConfig {
     fn default() -> Self {
-        Self { n_steps: 5000, lr: 1e-2, beta1: 0.9, beta2: 0.95, eps: 1e-8 }
+        Self {
+            n_steps: 5000,
+            lr: 1e-2,
+            beta1: 0.9,
+            beta2: 0.95,
+            eps: 1e-8,
+        }
     }
 }

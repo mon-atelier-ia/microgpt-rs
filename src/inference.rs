@@ -1,7 +1,7 @@
 use crate::config::ModelConfig;
-use crate::model::Params;
-use crate::forward::{forward, new_kv_cache};
 use crate::data::Vocab;
+use crate::forward::{forward, new_kv_cache};
+use crate::model::Params;
 use crate::rng::Rng;
 
 /// Generate `n_samples` names autoregressively.
@@ -23,7 +23,9 @@ pub fn generate(
         for pos in 0..cfg.block_size {
             let c = forward(w, tok, pos, &mut kv, cfg);
             tok = rng.categorical(&c.probs);
-            if tok == eos { break; }
+            if tok == eos {
+                break;
+            }
             name.push_str(&vocab.tokens[tok]);
         }
         results.push(name);

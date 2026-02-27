@@ -6,19 +6,31 @@ pub struct Vocab {
 }
 
 impl Vocab {
-    pub fn bos(&self) -> usize { self.stoi["<BOS>"] }
-    pub fn eos(&self) -> usize { self.stoi["<EOS>"] }
-    pub fn size(&self) -> usize { self.tokens.len() }
+    pub fn bos(&self) -> usize {
+        self.stoi["<BOS>"]
+    }
+    pub fn eos(&self) -> usize {
+        self.stoi["<EOS>"]
+    }
+    pub fn size(&self) -> usize {
+        self.tokens.len()
+    }
 }
 
 pub fn build_vocab(docs: &[&str]) -> Vocab {
     let mut chars = BTreeSet::new();
     for d in docs {
-        for c in d.chars() { chars.insert(c); }
+        for c in d.chars() {
+            chars.insert(c);
+        }
     }
     let mut tokens = vec!["<BOS>".to_string(), "<EOS>".to_string()];
     tokens.extend(chars.iter().map(|c| c.to_string()));
-    let stoi: HashMap<String, usize> = tokens.iter().enumerate().map(|(i, s)| (s.clone(), i)).collect();
+    let stoi: HashMap<String, usize> = tokens
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.clone(), i))
+        .collect();
     Vocab { tokens, stoi }
 }
 
