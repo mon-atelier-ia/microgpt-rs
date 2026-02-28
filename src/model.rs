@@ -11,23 +11,38 @@ fn make_matrix(nout: usize, nin: usize, std: f64, rng: &mut Rng) -> Matrix {
         .collect()
 }
 
+/// Attention and MLP weights for one transformer block.
+#[derive(Debug, Clone)]
 pub struct LayerWeights {
+    /// Query projection `[n_embd][n_embd]`.
     pub attn_wq: Matrix,
+    /// Key projection `[n_embd][n_embd]`.
     pub attn_wk: Matrix,
+    /// Value projection `[n_embd][n_embd]`.
     pub attn_wv: Matrix,
+    /// Output projection `[n_embd][n_embd]`.
     pub attn_wo: Matrix,
+    /// MLP first layer `[4*n_embd][n_embd]`.
     pub mlp_fc1: Matrix,
+    /// MLP second layer `[n_embd][4*n_embd]`.
     pub mlp_fc2: Matrix,
 }
 
+/// All model weights: embeddings, transformer layers, and output head.
+#[derive(Debug, Clone)]
 pub struct StateDict {
+    /// Token embeddings `[vocab_size][n_embd]`.
     pub wte: Matrix,
+    /// Position embeddings `[block_size][n_embd]`.
     pub wpe: Matrix,
+    /// Output projection `[vocab_size][n_embd]` (no weight tying).
     pub lm_head: Matrix,
+    /// Transformer block weights (one per layer).
     pub layers: Vec<LayerWeights>,
 }
 
 impl StateDict {
+    /// Initialize all weights with gaussian noise at `tc.std_init`.
     pub fn new(vocab_size: usize, rng: &mut Rng, mc: &ModelConfig, tc: &TrainConfig) -> Self {
         let e = mc.n_embd;
         let std = tc.std_init;
@@ -77,15 +92,23 @@ impl StateDict {
     }
 }
 
+/// Complete model: weights + Adam optimizer state.
+#[derive(Debug, Clone)]
 pub struct Model {
+    /// Architecture configuration.
     pub config: ModelConfig,
+    /// Vocabulary size (unique chars + BOS).
     pub vocab_size: usize,
+    /// All weight matrices.
     pub sd: StateDict,
+    /// Adam first moment buffer.
     pub m_buf: Vec<f64>,
+    /// Adam second moment buffer.
     pub v_buf: Vec<f64>,
 }
 
 impl Model {
+    /// Create a new model with random weights.
     pub fn new(vocab_size: usize, rng: &mut Rng, mc: ModelConfig, tc: &TrainConfig) -> Self {
         let sd = StateDict::new(vocab_size, rng, &mc, tc);
         let n = sd.params().len();
@@ -98,6 +121,7 @@ impl Model {
         }
     }
 
+    /// Total number of trainable parameters.
     pub fn param_count(&self) -> usize {
         self.sd.params().len()
     }

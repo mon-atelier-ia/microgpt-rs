@@ -1,15 +1,18 @@
 /// Xorshift64 PRNG with gaussian and categorical sampling.
+#[derive(Debug, Clone)]
 pub struct Rng {
     state: u64,
 }
 
 impl Rng {
+    /// Create a new PRNG with the given seed.
     pub fn new(seed: u64) -> Self {
         Rng {
             state: seed ^ 0x123456789abcdef,
         }
     }
 
+    /// Generate the next raw u64.
     pub fn next_u64(&mut self) -> u64 {
         let mut x = self.state;
         x ^= x << 13;
