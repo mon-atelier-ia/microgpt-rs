@@ -4,7 +4,7 @@ pub mod inference;
 pub mod model;
 pub mod rng;
 pub mod train;
+pub mod value;
 
-mod backward;
 mod forward;
 mod ops;

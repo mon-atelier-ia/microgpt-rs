@@ -1,156 +1,99 @@
-#![allow(clippy::needless_range_loop)] // multi-array indexed loops in numerical code
-
 use crate::config::ModelConfig;
-use crate::model::Params;
-use crate::ops::{linear, rmsnorm, softmax, zeros};
+use crate::model::StateDict;
+use crate::ops::{linear, rmsnorm, softmax};
+use crate::value::Value;
 
-/// Per-position KV pairs for each layer: `[layer][(keys, values)]`.
-pub type KvCache = Vec<(Vec<Vec<f32>>, Vec<Vec<f32>>)>;
-/// Per-position gradient accumulators for KV cache.
-pub type DKvCache = Vec<(Vec<Vec<f32>>, Vec<Vec<f32>>)>;
+/// KV cache: `[layer][position][dim]`.
+pub type KvCache = Vec<Vec<Vec<Value>>>;
 
-pub(crate) struct AttnCtx {
-    pub all_k: Vec<Vec<f32>>,
-    pub all_v: Vec<Vec<f32>>,
-    pub aw: Vec<Vec<f32>>,
-    pub ho: Vec<f32>,
+pub(crate) fn new_kv_cache(cfg: &ModelConfig) -> (KvCache, KvCache) {
+    (vec![vec![]; cfg.n_layer], vec![vec![]; cfg.n_layer])
 }
 
-#[allow(dead_code)] // fields stored for cache completeness, used by potential extensions
-pub(crate) struct LCache {
-    pub x_pre_attn: Vec<f32>,
-    pub xn_attn: Vec<f32>,
-    pub rms_a: f32,
-    pub q: Vec<f32>,
-    pub attn_out: Vec<f32>,
-    pub x_post_attn: Vec<f32>,
-    pub xn_mlp: Vec<f32>,
-    pub rms_m: f32,
-    pub h1: Vec<f32>,
-    pub h1a: Vec<f32>,
-    pub mlp_out: Vec<f32>,
-    pub x_post_mlp: Vec<f32>,
-}
-
-pub(crate) struct PosCache {
-    pub tok_id: usize,
-    pub pos_id: usize,
-    pub x0: Vec<f32>,
-    pub layers: Vec<LCache>,
-    pub probs: Vec<f32>,
-    pub attn_ctx: Vec<AttnCtx>,
-}
-
-pub(crate) fn new_kv_cache(cfg: &ModelConfig) -> KvCache {
-    vec![(vec![], vec![]); cfg.n_layer]
-}
-
+/// Forward one token through the GPT, returns logits.
 pub(crate) fn forward(
-    w: &Params,
-    tok: usize,
-    pos: usize,
-    kv_cache: &mut KvCache,
+    token_id: usize,
+    pos_id: usize,
+    keys: &mut KvCache,
+    vals: &mut KvCache,
+    sd: &StateDict,
     cfg: &ModelConfig,
-) -> PosCache {
-    let vs = w.wte.len() / cfg.n_embd;
-    let e = cfg.n_embd;
-    let hd = cfg.head_dim();
-    let nh = cfg.n_head;
-    let bs = cfg.block_size;
+) -> Vec<Value> {
+    let n_head = cfg.n_head;
+    let head_dim = cfg.head_dim();
 
-    // Embeddings
-    let te = &w.wte[tok * e..(tok + 1) * e];
-    let pe = &w.wpe[(pos % bs) * e..(pos % bs + 1) * e];
-    let mut x: Vec<f32> = te.iter().zip(pe).map(|(a, b)| a + b).collect();
-    let x0 = x.clone();
+    let tok_emb = &sd.wte[token_id];
+    let pos_emb = &sd.wpe[pos_id];
+    let mut x: Vec<Value> = tok_emb.iter().zip(pos_emb).map(|(t, p)| t.add(p)).collect();
+    x = rmsnorm(&x);
 
-    let mut layers = Vec::with_capacity(cfg.n_layer);
-    let mut attn_ctx = Vec::with_capacity(cfg.n_layer);
+    for li in 0..sd.layers.len() {
+        let lw = &sd.layers[li];
 
-    for l in 0..cfg.n_layer {
-        let lw = &w.layers[l];
-        let x_pre_attn = x.clone();
-        let (xn_attn, rms_a) = rmsnorm(&x);
+        // Multi-head self-attention
+        let x_res = x.clone();
+        x = rmsnorm(&x);
+        let q = linear(&x, &lw.attn_wq);
+        let k = linear(&x, &lw.attn_wk);
+        let v = linear(&x, &lw.attn_wv);
+        keys[li].push(k);
+        vals[li].push(v);
 
-        let q = linear(&xn_attn, &lw.wq, e, e);
-        let k = linear(&xn_attn, &lw.wk, e, e);
-        let v = linear(&xn_attn, &lw.wv, e, e);
+        let seq_len = keys[li].len();
+        let scale = (head_dim as f64).sqrt();
+        let mut x_attn: Vec<Value> = Vec::with_capacity(n_head * head_dim);
 
-        // Accumulate KV cache (real causal attention)
-        kv_cache[l].0.push(k);
-        kv_cache[l].1.push(v);
-        let all_k = &kv_cache[l].0;
-        let all_v = &kv_cache[l].1;
-        let t_len = all_k.len();
-        let scale = (hd as f32).sqrt();
+        for h in 0..n_head {
+            let hs = h * head_dim;
+            let q_h = &q[hs..hs + head_dim];
 
-        let mut aw_all: Vec<Vec<f32>> = Vec::with_capacity(nh);
-        let mut ho = zeros(e);
-
-        for h in 0..nh {
-            let qs = &q[h * hd..(h + 1) * hd];
-            let logits: Vec<f32> = (0..t_len)
+            let attn_logits: Vec<Value> = (0..seq_len)
                 .map(|t| {
-                    let ks = &all_k[t][h * hd..(h + 1) * hd];
-                    qs.iter().zip(ks).map(|(a, b)| a * b).sum::<f32>() / scale
+                    let dot = q_h
+                        .iter()
+                        .zip(&keys[li][t][hs..hs + head_dim])
+                        .map(|(qi, ki)| qi.mul(ki))
+                        .reduce(|a, b| a.add(&b))
+                        .unwrap();
+                    dot.mul_f64(1.0 / scale)
                 })
                 .collect();
-            let aw_h = softmax(&logits);
-            for i in 0..hd {
-                let out_i: f32 = (0..t_len).map(|t| aw_h[t] * all_v[t][h * hd + i]).sum();
-                ho[h * hd + i] = out_i;
+
+            let attn_w = softmax(&attn_logits);
+
+            for j in 0..head_dim {
+                let out = (0..seq_len)
+                    .map(|t| attn_w[t].mul(&vals[li][t][hs + j]))
+                    .reduce(|a, b| a.add(&b))
+                    .unwrap();
+                x_attn.push(out);
             }
-            aw_all.push(aw_h);
         }
 
-        let attn_out = linear(&ho, &lw.wo, e, e);
-        let x_post_attn: Vec<f32> = x_pre_attn
-            .iter()
-            .zip(&attn_out)
-            .map(|(a, b)| a + b)
-            .collect();
-        x = x_post_attn.clone();
+        x = linear(&x_attn, &lw.attn_wo);
+        x = x.iter().zip(&x_res).map(|(a, b)| a.add(b)).collect();
 
-        let (xn_mlp, rms_m) = rmsnorm(&x);
-        let h1: Vec<f32> = linear(&xn_mlp, &lw.fc1, 4 * e, e);
-        let h1a: Vec<f32> = h1
-            .iter()
-            .map(|v| if *v > 0.0 { v * v } else { 0.0 })
-            .collect();
-        let mlp_out = linear(&h1a, &lw.fc2, e, 4 * e);
-        let x_post_mlp: Vec<f32> = x.iter().zip(&mlp_out).map(|(a, b)| a + b).collect();
-        x = x_post_mlp.clone();
-
-        attn_ctx.push(AttnCtx {
-            all_k: all_k.clone(),
-            all_v: all_v.clone(),
-            aw: aw_all,
-            ho,
-        });
-        layers.push(LCache {
-            x_pre_attn,
-            xn_attn,
-            rms_a,
-            q,
-            attn_out,
-            x_post_attn,
-            xn_mlp,
-            rms_m,
-            h1,
-            h1a,
-            mlp_out,
-            x_post_mlp,
-        });
+        // MLP
+        let x_res = x.clone();
+        x = rmsnorm(&x);
+        x = linear(&x, &lw.mlp_fc1);
+        x = x.iter().map(|xi| xi.relu()).collect();
+        x = linear(&x, &lw.mlp_fc2);
+        x = x.iter().zip(&x_res).map(|(a, b)| a.add(b)).collect();
     }
 
-    let logits = linear(&x, &w.wte, vs, e);
-    let probs = softmax(&logits);
-    PosCache {
-        tok_id: tok,
-        pos_id: pos,
-        x0,
-        layers,
-        probs,
-        attn_ctx,
-    }
+    linear(&x, &sd.lm_head)
+}
+
+/// Forward one token and return softmax probabilities.
+pub(crate) fn forward_probs(
+    token_id: usize,
+    pos_id: usize,
+    keys: &mut KvCache,
+    vals: &mut KvCache,
+    sd: &StateDict,
+    cfg: &ModelConfig,
+) -> Vec<Value> {
+    let logits = forward(token_id, pos_id, keys, vals, sd, cfg);
+    softmax(&logits)
 }
