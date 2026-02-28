@@ -121,7 +121,14 @@ Keep zeroclawgpt's library structure + analytical speed, add autograd as optiona
 
 ## Decision
 
-Pending — awaiting user input.
+**Option B chosen** (2026-02-28): Rebase on blackopsrepl.
+
+- zeroclawgpt code archived on `archive/zeroclawgpt` branch
+- All `src/` modules rewritten based on blackopsrepl's gist
+- `backward.rs` deleted (autograd `Value.backward()` replaces analytical gradients)
+- `value.rs` added (scalar autograd engine)
+- All 5 smoke tests pass
+- Conformance: 8/8 with Karpathy's gist
 
 ## References
 
