@@ -66,7 +66,7 @@ fn main() {
     }
 
     // Generate
-    let samples = generate(&model.sd, &vocab, &mut rng, &mc, 5, tc.temperature);
+    let samples = generate(&model.sd, &vocab, &mut rng, &mc, 5, tc.temperature, "");
     println!("{}", samples.join("  "));
 }
 ```
@@ -183,6 +183,7 @@ tests/
 | `beta2` | 0.99 | Adam second moment decay |
 | `std_init` | 0.08 | Weight initialization std |
 | `temperature` | 0.5 | Inference temperature |
+| `n_samples` | 5 | Number of samples to generate |
 | LR schedule | linear decay | `lr * (1 - step/n_steps)` |
 
 All values match Karpathy's gist. Override via `ModelConfig` and `TrainConfig` structs.
