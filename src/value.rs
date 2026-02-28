@@ -16,6 +16,10 @@ struct ValueInner {
 }
 
 /// A node in the computation graph.
+///
+/// `Clone` is shallow (Rc reference count). `PartialEq` is intentionally
+/// not derived — Rc equality would compare pointers, not values, which
+/// would be misleading for a numeric type.
 #[derive(Clone)]
 pub struct Value(Rc<RefCell<ValueInner>>);
 

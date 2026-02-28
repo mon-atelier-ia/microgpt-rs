@@ -1,3 +1,5 @@
+//! Character-level vocabulary and tokenization.
+
 use std::collections::{BTreeSet, HashMap};
 
 /// Character-level vocabulary with string-to-id mapping.

@@ -1,3 +1,5 @@
+//! GPT model architecture and training hyperparameters.
+
 /// GPT model architecture parameters.
 #[derive(Debug, Clone, Copy)]
 pub struct ModelConfig {

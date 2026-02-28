@@ -1,3 +1,5 @@
+//! Autoregressive text generation with temperature sampling.
+
 use crate::config::ModelConfig;
 use crate::data::Vocab;
 use crate::forward::{forward, new_kv_cache};

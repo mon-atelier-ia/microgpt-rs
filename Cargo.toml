@@ -10,9 +10,6 @@ authors = ["mon-atelier-ia"]
 keywords = ["gpt", "transformer", "zero-dependency", "machine-learning"]
 categories = ["science", "algorithms"]
 
-[lib]
-crate-type = ["lib"]
-
 [[bin]]
 name = "demo"
 path = "src/bin/demo.rs"
