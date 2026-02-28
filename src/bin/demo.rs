@@ -117,7 +117,7 @@ fn main() {
     let mut rng = Rng::new(42);
     let docs = names();
     let vocab = build_vocab(&docs);
-    let mut model = Model::new(vocab.size(), &mut rng, mc);
+    let mut model = Model::new(vocab.size(), &mut rng, mc, &tc);
 
     println!(
         "microgpt-rs  vocab={}  params={}  layers={}  embd={}  heads={}",
@@ -136,8 +136,8 @@ fn main() {
         let tokens = tokenize(doc, &vocab, mc.block_size);
         let loss = train_step(&mut model, &tokens, step, &tc);
 
-        if step % 500 == 0 || step == tc.n_steps - 1 {
-            let samples = generate(&model.w, &vocab, &mut rng, &mc, 5);
+        if step % 100 == 0 || step == tc.n_steps - 1 {
+            let samples = generate(&model.sd, &vocab, &mut rng, &mc, 5, tc.temperature);
             print!(
                 "step {:>5}  loss={:.4}  t={:.2}s  | ",
                 step,

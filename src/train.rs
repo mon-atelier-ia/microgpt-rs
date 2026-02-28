@@ -1,54 +1,36 @@
-use crate::backward::backward;
 use crate::config::TrainConfig;
-use crate::forward::{forward, new_kv_cache, DKvCache};
+use crate::forward::{forward_probs, new_kv_cache};
 use crate::model::Model;
-use crate::ops::zeros;
 
-/// Run one training step: forward → backward → Adam update.
+/// Run one training step: forward all positions → loss → backward → Adam.
 /// Returns the average cross-entropy loss for this sequence.
-pub fn train_step(model: &mut Model, tokens: &[usize], step: usize, tc: &TrainConfig) -> f32 {
-    let cfg = model.config; // Copy — avoids borrow conflict with &mut self
-    let e = cfg.n_embd;
-    let n_pred = tokens.len().saturating_sub(1);
-    if n_pred == 0 {
+pub fn train_step(model: &mut Model, tokens: &[usize], step: usize, tc: &TrainConfig) -> f64 {
+    let cfg = model.config;
+    let n = cfg.block_size.min(tokens.len().saturating_sub(1));
+    if n == 0 {
         return 0.0;
     }
 
-    model.zero_grad();
+    let (mut keys, mut vals) = new_kv_cache(&cfg);
+    let mut losses = Vec::with_capacity(n);
 
-    // Forward all positions (building KV cache)
-    let mut kv = new_kv_cache(&cfg);
-    let mut caches = Vec::with_capacity(n_pred);
-    let mut loss_sum = 0.0f32;
-
-    for pos in 0..n_pred {
-        let cache = forward(&model.w, tokens[pos], pos, &mut kv, &cfg);
-        loss_sum -= cache.probs[tokens[pos + 1]].ln();
-        caches.push(cache);
+    for pos_id in 0..n {
+        let token_id = tokens[pos_id];
+        let target_id = tokens[pos_id + 1];
+        let probs = forward_probs(token_id, pos_id, &mut keys, &mut vals, &model.sd, &cfg);
+        losses.push(probs[target_id].log().neg());
     }
 
-    // Backward in reverse — d_kv_cache accumulates cross-position gradients
-    let mut d_kv: DKvCache = (0..cfg.n_layer)
-        .map(|_| {
-            let dk: Vec<Vec<f32>> = (0..n_pred).map(|_| zeros(e)).collect();
-            let dv: Vec<Vec<f32>> = (0..n_pred).map(|_| zeros(e)).collect();
-            (dk, dv)
-        })
-        .collect();
+    let loss = losses
+        .iter()
+        .skip(1)
+        .fold(losses[0].clone(), |a, b| a.add(b))
+        .mul_f64(1.0 / n as f64);
 
-    for pos in (0..n_pred).rev() {
-        backward(
-            &model.w,
-            &mut model.g,
-            &caches[pos],
-            tokens[pos + 1],
-            tokens.len(),
-            &mut d_kv,
-            &cfg,
-        );
-    }
+    loss.backward();
+    let loss_val = loss.data();
 
-    model.adam_step(step + 1, tc); // 1-indexed for Adam bias correction
+    model.adam_step(step, tc);
 
-    loss_sum / n_pred as f32
+    loss_val
 }

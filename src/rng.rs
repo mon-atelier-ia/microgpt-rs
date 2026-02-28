@@ -1,48 +1,56 @@
-/// Tiny PRNG (xoshiro128+), zero dependencies.
+/// Xorshift64 PRNG with gaussian and categorical sampling.
 pub struct Rng {
-    s: [u32; 4],
+    state: u64,
 }
 
 impl Rng {
     pub fn new(seed: u64) -> Self {
-        let lo = seed as u32;
-        let hi = (seed >> 32) as u32;
-        Self {
-            s: [
-                lo ^ 0xdeadbeef,
-                hi ^ 0xcafebabe,
-                lo.wrapping_add(1),
-                hi.wrapping_add(1),
-            ],
+        Rng {
+            state: seed ^ 0x123456789abcdef,
         }
     }
 
-    pub fn next_u32(&mut self) -> u32 {
-        let r = self.s[0].wrapping_add(self.s[3]);
-        let t = self.s[1] << 9;
-        self.s[2] ^= self.s[0];
-        self.s[3] ^= self.s[1];
-        self.s[1] ^= self.s[2];
-        self.s[0] ^= self.s[3];
-        self.s[2] ^= t;
-        self.s[3] = self.s[3].rotate_left(11);
-        r
+    pub fn next_u64(&mut self) -> u64 {
+        let mut x = self.state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.state = x;
+        x
     }
 
-    pub fn gauss(&mut self, std: f32) -> f32 {
-        let u1 = (self.next_u32() as f32 + 1.0) / (u32::MAX as f32 + 2.0);
-        let u2 = self.next_u32() as f32 / u32::MAX as f32;
-        std * (-2.0 * u1.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos()
+    /// Uniform in [0, 1).
+    pub fn uniform(&mut self) -> f64 {
+        (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64
     }
 
-    pub fn categorical(&mut self, probs: &[f32]) -> usize {
-        let mut dart = (self.next_u32() as f32 / u32::MAX as f32) * probs.iter().sum::<f32>();
-        for (i, &p) in probs.iter().enumerate() {
-            dart -= p;
-            if dart <= 0.0 {
+    /// Gaussian via Box-Muller.
+    pub fn gauss(&mut self, mu: f64, sigma: f64) -> f64 {
+        let u1 = self.uniform().max(1e-300);
+        let u2 = self.uniform();
+        let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+        mu + sigma * z
+    }
+
+    /// Fisher-Yates shuffle.
+    pub fn shuffle<T>(&mut self, v: &mut [T]) {
+        let n = v.len();
+        for i in (1..n).rev() {
+            let j = (self.next_u64() as usize) % (i + 1);
+            v.swap(i, j);
+        }
+    }
+
+    /// Weighted categorical sample; returns index.
+    pub fn categorical(&mut self, weights: &[f64]) -> usize {
+        let total: f64 = weights.iter().sum();
+        let mut r = self.uniform() * total;
+        for (i, &w) in weights.iter().enumerate() {
+            r -= w;
+            if r <= 0.0 {
                 return i;
             }
         }
-        probs.len() - 1
+        weights.len() - 1
     }
 }
