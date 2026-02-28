@@ -10,140 +10,110 @@
 - [x] Archive zeroclawgpt code on `archive/zeroclawgpt` branch
 - [x] Modular library: value.rs, config.rs, model.rs, forward.rs, train.rs, inference.rs, data.rs, rng.rs, ops.rs
 - [x] Public API: `train_step()`, `generate()`, `build_vocab()`, `tokenize()`, `Value`
-- [x] Smoke tests (vocab, tokenizer, lm_head, loss decrease, generation)
+- [x] Smoke tests (vocab, tokenizer, lm_head, loss decrease, generation, prefix)
 - [x] Dev tooling: rustfmt, clippy, git hooks, rust-analyzer
 - [x] Push to mon-atelier-ia/microgpt-rs
+- [x] Quick wins: `prefix` param in `generate()`, `n_samples` in `TrainConfig`
 
-## Phase 1 — WASM Bindings
+## Phase 0.5 — Naming & Architecture Decision (Done)
 
-**Goal:** Replace the TypeScript ML engine in microgpt-ts-fr with a WASM module compiled from this crate.
+**Decision**: the final product is **microgpt animé** (`microgpt-anime`).
+
+### Context
+
+| Project | Origin | Role |
+|---|---|---|
+| `microgpt-rs` | Original (blackopsrepl base) | Rust ML engine (library crate) |
+| `microgpt-visualizer-fr` | Fork FR of enescang/microgpt-visualizer | UI source (React/Vite/TS) |
+| `microgpt-anime` | **New project** | Rust engine + visualizer UI = standalone product |
+
+### Why a new project?
+
+- `microgpt-rs` = engine only (no UI, reusable library)
+- `microgpt-visualizer-fr` = fork localisé (not an original project)
+- `microgpt-anime` = original creation combining both — not a fork of anything
+- Naming convention: `-fr` suffix = French localization of upstream. This project is not a localization.
+
+### What goes where
+
+| Concern | Lives in |
+|---|---|
+| Autograd engine, GPT model, training, inference | `microgpt-rs` (this repo) |
+| WASM bindings (`wasm-bindgen`) | `microgpt-anime` (depends on `microgpt-rs`) |
+| Visualizer UI (React pages, components) | `microgpt-anime` (ported from `microgpt-visualizer-fr`) |
+| French datasets | `microgpt-anime` (imported from both TS projects) |
+| Android bindings (future) | `microgpt-rs` or `microgpt-anime` TBD |
+
+## Phase 1 — microgpt-anime: WASM + UI
+
+**Goal:** Create `microgpt-anime` — Rust engine compiled to WASM, powering the visualizer UI.
 
 ### Steps
 
-1. Create `crates/wasm/` sub-crate with `wasm-bindgen` dependency
-2. Expose key API functions:
+1. Create `C:\Dev\microgpt-anime\` project
+   - Cargo workspace: WASM crate depends on `microgpt-rs`
+   - Vite/React frontend (ported from `microgpt-visualizer-fr`)
+2. WASM bindings (`wasm-bindgen`):
    - `create_model(vocab_size, config_json) -> ModelHandle`
    - `train_step(handle, tokens) -> f64` (returns loss)
-   - `generate(handle, n_samples, temperature) -> Vec<String>`
-   - `get_activations(handle) -> JSON` (for visualizer)
-3. Build with `wasm-pack build --target web`
-4. Integrate into microgpt-ts-fr's existing Web Worker architecture
-   - Workers currently call TS engine — switch to calling WASM
-   - Keep the React UI unchanged
+   - `generate(handle, n_samples, temperature, prefix) -> Vec<String>`
+   - `get_activations(handle) -> JSON` (for visualizer pages)
+3. Wire UI to WASM:
+   - Replace TS engine calls with WASM calls
+   - Keep all React pages/components from visualizer
+4. French datasets embedded in WASM crate
 
 ### Technical Notes
 
-- Zero crate deps in core = trivial WASM compilation
+- Zero crate deps in `microgpt-rs` core = trivial WASM compilation
 - `Rc<RefCell<>>` compiles to WASM (no GC, reference counting in linear memory)
-- `wasm-bindgen` only needed in the `crates/wasm/` sub-crate
-- Shared types via `serde_json` (or manual JSON serialization to stay minimal)
+- `wasm-bindgen` only in the WASM crate, not in `microgpt-rs`
+- UI params already covered: see `ui-parameters-audit.md`
 
 ### Expected Outcome
 
-- Training speed: TS engine → WASM should be ~8x faster in browser
-- Same UI, same worker architecture, just faster engine
-- Autograd `Value` graph is available for visualization
+- Training speed: ~8x faster than current TS engine in browser
+- Same pedagogical UI (tokenizer, embeddings, forward pass, training, inference pages)
+- Autograd `Value` graph available for visualization
 
-## Phase 2 — Android Bindings (UniFFI)
+## Phase 2 — Android (Future)
 
 **Goal:** Expose the Rust core to Kotlin for an Android app.
 
-### Steps
-
-1. Create `crates/android/` sub-crate with UniFFI
-2. Define UDL interface file (UniFFI's IDL)
-3. Generate Kotlin bindings: `cargo uniffi-bindgen generate`
-4. Cross-compile:
-   - `aarch64-linux-android` (ARM64 devices)
-   - `armv7-linux-androideabi` (older ARM)
-   - `x86_64-linux-android` (emulator)
-5. Build Android app shell with Jetpack Compose
-
-### Technical Notes
-
-- UniFFI (Mozilla) is production-ready — used in Firefox for Android
-- `cargo-ndk` handles the Android NDK toolchain
-- No C/C++ layer — UniFFI generates direct Kotlin <-> Rust bindings
-- Same core crate, different binding layer
-
-## Phase 3 — French Datasets
-
-**Goal:** Port the French datasets from microgpt-ts-fr to Rust.
-
-### Steps
-
-1. Add a `datasets/` directory with embedded `.txt` files (or `include_str!`)
-2. Port from microgpt-ts-fr:
-   - `prenoms-simple` (50 entries) — quick demo
-   - `prenoms` (1,000 entries) — full training
-   - `dinosaures` (1,530 entries)
-   - `pokemon-fr` (1,022 entries)
-3. Also available from microgpt-visualizer-fr:
-   - `prenoms-insee` (33,235 entries) — comprehensive
-4. Adapt demo binary with a `--dataset` flag
-
-### Technical Notes
-
-- Character-level tokenizer already supports Unicode — no code changes needed
-- Larger vocab = more embedding parameters = slightly slower training
-- Datasets embedded at compile time via `include_str!` (still zero deps)
-
-## Phase 4 — Visualizer Integration
-
-**Goal:** Feed activation data and autograd graph from the Rust engine to microgpt-visualizer-fr.
-
-### Steps
-
-1. Add `pub fn get_layer_activations()` to the library API
-2. Export attention weights, intermediate embeddings, gradient norms
-3. Expose autograd `Value` graph structure (children, gradients) for educational visualization
-4. WASM binding: `get_activations()` returns a JS-accessible object
-
-### Note
-
-The migration to blackopsrepl's autograd approach resolves the earlier open question: the `Value` computation graph is now available in Rust, matching the TS visualizer's architecture. Both projects can share the same autograd-based visualization.
+- UniFFI or JNI bindings
+- Jetpack Compose UI
+- Depends on Phase 1 proving the architecture
 
 ## Architecture Target
 
 ```
-microgpt-rs/
-├── Cargo.toml              # Workspace root
-├── src/                    # Core library (zero deps)
-│   ├── lib.rs
-│   ├── value.rs
-│   ├── config.rs
-│   ├── model.rs
-│   ├── forward.rs
-│   ├── train.rs
-│   ├── inference.rs
-│   ├── data.rs
-│   ├── rng.rs
-│   └── ops.rs
+microgpt-rs/                    # This repo — engine library
+├── src/                        # Core library (zero deps)
+│   ├── lib.rs, value.rs, config.rs, model.rs
+│   ├── forward.rs, train.rs, inference.rs
+│   ├── data.rs, rng.rs, ops.rs
+│   └── bin/demo.rs
+└── tests/smoke.rs
+
+microgpt-anime/                 # New repo — standalone product
 ├── crates/
-│   ├── wasm/               # wasm-bindgen bindings
-│   │   ├── Cargo.toml
-│   │   └── src/lib.rs
-│   └── android/            # UniFFI bindings
+│   └── wasm/                   # wasm-bindgen, depends on microgpt-rs
 │       ├── Cargo.toml
-│       ├── src/lib.rs
-│       └── src/model.udl
-├── datasets/               # Embedded French/English data
-├── src/bin/demo.rs         # CLI demo
-└── tests/smoke.rs          # Smoke tests
+│       └── src/lib.rs
+├── src/                        # React/Vite frontend
+│   ├── components/             # From microgpt-visualizer-fr
+│   ├── pages/                  # Tokenizer, Embeddings, ForwardPass, Training, Inference
+│   └── App.tsx
+├── datasets/                   # French + English datasets
+├── package.json
+└── vite.config.ts
 ```
-
-## Priority Order
-
-1. **WASM** — highest impact, enables browser speedup for both TS projects
-2. **French datasets** — can be done in parallel with WASM
-3. **Android** — requires more tooling (NDK, UniFFI, Compose), do after web is proven
-4. **Visualizer** — autograd graph now available, integration straightforward
 
 ## References
 
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/)
-- [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/)
-- [UniFFI](https://github.com/mozilla/uniffi-rs)
-- [cargo-ndk](https://github.com/nickelc/cargo-ndk)
 - [Karpathy's microgpt.py gist](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95)
 - [blackopsrepl's microgpt.rs](https://gist.github.com/blackopsrepl/bf7838f8f365c77e36075ca301db298e)
+- [dubzdubz/microgpt-ts](https://github.com/dubzdubz/microgpt-ts) — upstream of microgpt-ts-fr
+- [enescang/microgpt-visualizer](https://github.com/enescang/microgpt-visualizer) — upstream of microgpt-visualizer-fr
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/)
+- [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/)

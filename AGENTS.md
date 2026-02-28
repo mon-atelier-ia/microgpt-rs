@@ -12,6 +12,7 @@ Project documentation lives in `docs/`. Key files:
 - `docs/gist-conformance.md` — audit of all implementations vs Karpathy's gist
 - `docs/roadmap.md` — WASM/Android integration plan, next steps
 - `docs/implementation-notes.md` — archived zeroclawgpt analysis
+- `docs/ui-parameters-audit.md` — UI params coverage vs TS projects
 
 ## Stack
 
