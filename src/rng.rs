@@ -1,3 +1,5 @@
+//! Xorshift64 PRNG with gaussian and categorical sampling.
+
 /// Xorshift64 PRNG with gaussian and categorical sampling.
 #[derive(Debug, Clone)]
 pub struct Rng {

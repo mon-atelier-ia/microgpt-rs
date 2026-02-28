@@ -1,3 +1,5 @@
+//! Weight matrices, state dict, and Adam optimizer.
+
 use crate::config::{ModelConfig, TrainConfig};
 use crate::rng::Rng;
 use crate::value::Value;

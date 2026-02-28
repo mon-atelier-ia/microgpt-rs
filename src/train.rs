@@ -1,3 +1,5 @@
+//! Single training step: forward, backward, Adam update.
+
 use crate::config::TrainConfig;
 use crate::forward::{forward_probs, new_kv_cache};
 use crate::model::Model;
