@@ -1,7 +1,11 @@
 use std::collections::{BTreeSet, HashMap};
 
+/// Character-level vocabulary with string-to-id mapping.
+#[derive(Debug, Clone)]
 pub struct Vocab {
+    /// Ordered list of tokens (chars + BOS).
     pub tokens: Vec<String>,
+    /// String → token id mapping.
     pub stoi: HashMap<String, usize>,
     bos: usize,
 }
@@ -11,6 +15,7 @@ impl Vocab {
     pub fn bos(&self) -> usize {
         self.bos
     }
+    /// Total vocabulary size (unique chars + BOS).
     pub fn size(&self) -> usize {
         self.tokens.len()
     }
