@@ -54,7 +54,7 @@ pub(crate) fn forward(
                         .zip(&keys[li][t][hs..hs + head_dim])
                         .map(|(qi, ki)| qi.mul(ki))
                         .reduce(|a, b| a.add(&b))
-                        .unwrap();
+                        .expect("head_dim is always > 0");
                     dot.mul_f64(1.0 / scale)
                 })
                 .collect();
@@ -65,7 +65,7 @@ pub(crate) fn forward(
                 let out = (0..seq_len)
                     .map(|t| attn_w[t].mul(&vals[li][t][hs + j]))
                     .reduce(|a, b| a.add(&b))
-                    .unwrap();
+                    .expect("seq_len is always > 0");
                 x_attn.push(out);
             }
         }

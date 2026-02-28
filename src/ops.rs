@@ -8,7 +8,7 @@ pub(crate) fn linear(x: &[Value], w: &[Vec<Value>]) -> Vec<Value> {
                 .zip(x.iter())
                 .map(|(wi, xi)| wi.mul(xi))
                 .reduce(|a, b| a.add(&b))
-                .unwrap()
+                .expect("row is always non-empty")
         })
         .collect()
 }
@@ -32,7 +32,7 @@ pub(crate) fn rmsnorm(x: &[Value]) -> Vec<Value> {
         .iter()
         .map(|xi| xi.mul(xi))
         .reduce(|a, b| a.add(&b))
-        .unwrap()
+        .expect("x is always non-empty")
         .mul_f64(1.0 / n);
     let scale = ms.add_f64(1e-5).pow_f64(-0.5);
     x.iter().map(|xi| xi.mul(&scale)).collect()
