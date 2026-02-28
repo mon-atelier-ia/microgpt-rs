@@ -24,7 +24,7 @@ impl Default for ModelConfig {
     }
 }
 
-/// Training hyperparameters.
+/// Training and inference hyperparameters.
 #[derive(Debug, Clone, Copy)]
 pub struct TrainConfig {
     pub n_steps: usize,
@@ -34,6 +34,7 @@ pub struct TrainConfig {
     pub eps: f64,
     pub std_init: f64,
     pub temperature: f64,
+    pub n_samples: usize,
 }
 
 impl Default for TrainConfig {
@@ -46,6 +47,7 @@ impl Default for TrainConfig {
             eps: 1e-8,
             std_init: 0.08,
             temperature: 0.5,
+            n_samples: 5,
         }
     }
 }

@@ -137,7 +137,15 @@ fn main() {
         let loss = train_step(&mut model, &tokens, step, &tc);
 
         if step % 100 == 0 || step == tc.n_steps - 1 {
-            let samples = generate(&model.sd, &vocab, &mut rng, &mc, 5, tc.temperature);
+            let samples = generate(
+                &model.sd,
+                &vocab,
+                &mut rng,
+                &mc,
+                tc.n_samples,
+                tc.temperature,
+                "",
+            );
             print!(
                 "step {:>5}  loss={:.4}  t={:.2}s  | ",
                 step,
