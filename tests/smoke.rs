@@ -82,6 +82,21 @@ fn generate_produces_output() {
     let docs = small_dataset();
     let vocab = build_vocab(&docs);
     let model = Model::new(vocab.size(), &mut rng, mc, &tc);
-    let samples = generate(&model.sd, &vocab, &mut rng, &mc, 3, tc.temperature);
+    let samples = generate(&model.sd, &vocab, &mut rng, &mc, 3, tc.temperature, "");
     assert_eq!(samples.len(), 3);
+}
+
+#[test]
+fn generate_with_prefix() {
+    let mc = ModelConfig::default();
+    let tc = TrainConfig::default();
+    let mut rng = Rng::new(42);
+    let docs = small_dataset();
+    let vocab = build_vocab(&docs);
+    let model = Model::new(vocab.size(), &mut rng, mc, &tc);
+    let samples = generate(&model.sd, &vocab, &mut rng, &mc, 3, tc.temperature, "em");
+    assert_eq!(samples.len(), 3);
+    for s in &samples {
+        assert!(s.starts_with("em"), "Should start with prefix: got '{s}'");
+    }
 }
