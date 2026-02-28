@@ -3,13 +3,15 @@
 ## Agent Behavior
 
 - Be proactive: when you learn something important (decisions, conventions, pitfalls), save it to `AGENTS.md` or the relevant file in `docs/`.
+- **Always document findings** in `docs/` before acting on them. Never keep research results only in the conversation.
 - For non-trivial tasks, create a plan doc in `docs/` using a descriptive filename.
 
 ## Documentation
 
 Project documentation lives in `docs/`. Key files:
-- `docs/implementation-notes.md` — original zeroclawgpt analysis, bug fixes, test plan
+- `docs/gist-conformance.md` — audit of all implementations vs Karpathy's gist
 - `docs/roadmap.md` — WASM/Android integration plan, next steps
+- `docs/implementation-notes.md` — archived zeroclawgpt analysis
 
 ## Stack
 
@@ -28,44 +30,46 @@ No external crate dependencies. Everything is `std` only.
 ```
 src/
 ├── lib.rs           # Crate root (pub vs pub(crate) modules)
+├── value.rs         # Scalar autograd engine (Value + backward)
 ├── config.rs        # ModelConfig (Copy) + TrainConfig
-├── model.rs         # Params, LayerParams, Model
+├── model.rs         # StateDict, LayerWeights, Model (Adam state)
 ├── forward.rs       # Forward pass + KV cache (internal)
-├── backward.rs      # Analytical gradients (internal)
 ├── train.rs         # train_step() — public training API
 ├── inference.rs     # generate() — public inference API
 ├── data.rs          # Vocab, build_vocab(), tokenize()
-├── rng.rs           # xoshiro128+ PRNG
-├── ops.rs           # Linear algebra primitives (internal)
+├── rng.rs           # Xorshift64 PRNG
+├── ops.rs           # linear, softmax, rmsnorm on Vec<Value> (internal)
 └── bin/
     └── demo.rs      # CLI demo
 
 tests/
-└── smoke.rs         # 3 smoke tests
+└── smoke.rs         # 5 smoke tests
 ```
 
 ### Visibility Convention
 
-- `pub` modules (`config`, `model`, `data`, `train`, `inference`, `rng`): stable library API, consumed by external crates and future WASM/Android bindings
-- `pub(crate)` modules (`forward`, `backward`, `ops`): internal implementation, free to refactor
+- `pub` modules (`value`, `config`, `model`, `data`, `train`, `inference`, `rng`): stable library API
+- `pub(crate)` modules (`forward`, `ops`): internal implementation, free to refactor
 
 ## Scripts
 
 ```bash
-cargo build --release        # Build
+cargo build --release           # Build
 cargo run --release --bin demo  # Run demo
-cargo test --release         # Run tests
-cargo fmt --check            # Check formatting
-cargo clippy -- -D warnings  # Lint
+cargo test --release            # Run tests
+cargo fmt --check               # Check formatting
+cargo clippy -- -D warnings     # Lint
 ```
 
 ## Key Rules
 
-- **Zero dependencies**: no external crates. This is the point — the entire GPT is visible.
-- **Karpathy-faithful**: architecture, hyperparameters, and numerical behavior match the [original gist](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95).
-- **`ModelConfig` is `Copy`**: avoids borrow conflicts when `&mut Model` is in use. Never change it to non-Copy.
-- **Split borrows**: `forward()` takes `&Params`, `backward()` takes `(&Params, &mut Params)` — this is how we avoid borrow checker fights on `Model`.
-- **Numerical code style**: `#[allow(clippy::needless_range_loop)]` is acceptable in `forward.rs` and `backward.rs` where multi-array indexed loops are clearer than iterator chains.
+- **Zero dependencies**: no external crates. The entire GPT is visible.
+- **Karpathy-faithful**: architecture, hyperparameters, and numerical behavior match the [gist](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95). See `docs/gist-conformance.md`.
+- **Scalar autograd**: `Value(Rc<RefCell<>>)` computation graph with `backward()`. No analytical gradients.
+- **`ModelConfig` is `Copy`**: avoids borrow conflicts when `&mut Model` is in use.
+- **BOS only**: same token for start and end of sequence. No EOS token.
+- **Separate lm_head**: no weight tying with wte.
+- **f64 throughout**: matches Python's float precision.
 - Run `cargo fmt` and `cargo clippy -- -D warnings` before committing.
 
 ## Git Rules — STRICT
@@ -106,4 +110,4 @@ This crate is part of the [mon-atelier-ia](https://github.com/mon-atelier-ia) ed
 | [microgpt-ts-fr](https://github.com/mon-atelier-ia/microgpt-ts-fr) | TypeScript | Training playground, French datasets |
 | [microgpt-visualizer-fr](https://github.com/mon-atelier-ia/microgpt-visualizer-fr) | TypeScript | Transformer pipeline visualizer |
 
-The Rust core will eventually compile to WASM (web) and Android (NDK/UniFFI) to replace the TS engine in the sibling projects.
+The Rust core will compile to WASM (web) and Android (NDK/UniFFI) to replace the TS engine in both sibling projects.
