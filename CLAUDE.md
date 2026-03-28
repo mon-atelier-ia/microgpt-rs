@@ -103,10 +103,12 @@ Activate hooks: `git config core.hooksPath .githooks`
 
 This crate is part of the [mon-atelier-ia](https://github.com/mon-atelier-ia) educational GPT ecosystem:
 
-| Project | Language | Role |
-|---------|----------|------|
-| [microgpt-rs](https://github.com/mon-atelier-ia/microgpt-rs) | Rust | Core engine (this repo) |
-| [microgpt-ts-fr](https://github.com/mon-atelier-ia/microgpt-ts-fr) | TypeScript | Training playground, French datasets |
-| [microgpt-visualizer-fr](https://github.com/mon-atelier-ia/microgpt-visualizer-fr) | TypeScript | Transformer pipeline visualizer |
+| Project | Language | Role | Live |
+|---------|----------|------|------|
+| [microgpt-rs](https://github.com/mon-atelier-ia/microgpt-rs) | Rust | Core engine (this repo) | -- |
+| [microgpt-ts-fr](https://github.com/mon-atelier-ia/microgpt-ts-fr) | TypeScript | Training playground, French datasets | [Demo](https://microgpt-ts-fr.vercel.app) |
+| [microgpt-visualizer-fr](https://github.com/mon-atelier-ia/microgpt-visualizer-fr) | TypeScript | Transformer pipeline visualizer | [Demo](https://microgpt-visualizer-fr.vercel.app) |
+| [microgpt-lab](https://github.com/mon-atelier-ia/microgpt-lab) | TypeScript | Interactive lab environment | [Demo](https://microgpt-lab.vercel.app) |
+| [microgpt-anime](https://github.com/mon-atelier-ia/microgpt-anime) | TypeScript | Animated explainer | -- |
 
 The Rust core will compile to WASM (web) and Android (NDK/UniFFI) to replace the TS engine in both sibling projects.

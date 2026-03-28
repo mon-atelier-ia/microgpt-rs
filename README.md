@@ -212,6 +212,14 @@ Faithful Rust port of Karpathy's [microgpt.py gist](https://gist.github.com/karp
 
 This crate is the Rust core for the [mon-atelier-ia](https://github.com/mon-atelier-ia) educational GPT ecosystem:
 
+| Project | Language | Role | Live |
+|---------|----------|------|------|
+| [microgpt-rs](https://github.com/mon-atelier-ia/microgpt-rs) | Rust | Core engine (this repo) | -- |
+| [microgpt-ts-fr](https://github.com/mon-atelier-ia/microgpt-ts-fr) | TypeScript | Training playground, French datasets | [Demo](https://microgpt-ts-fr.vercel.app) |
+| [microgpt-visualizer-fr](https://github.com/mon-atelier-ia/microgpt-visualizer-fr) | TypeScript | Transformer pipeline visualizer | [Demo](https://microgpt-visualizer-fr.vercel.app) |
+| [microgpt-lab](https://github.com/mon-atelier-ia/microgpt-lab) | TypeScript | Interactive lab environment | [Demo](https://microgpt-lab.vercel.app) |
+| [microgpt-anime](https://github.com/mon-atelier-ia/microgpt-anime) | TypeScript | Animated explainer | -- |
+
 | Target | Approach | Status |
 |--------|----------|--------|
 | Library restructuring | Modular crate from gist | Done |
