@@ -2,7 +2,7 @@
 
 > Minimal GPT **library** in pure Rust — zero dependencies, faithful port of Karpathy's [microgpt.py](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95) with scalar autograd.
 
-A complete, from-scratch GPT restructured as a reusable Rust crate. Scalar autograd engine, forward pass, Adam optimizer, character-level tokenizer — all in `std` only. Based on [blackopsrepl's faithful Rust port](https://gist.github.com/blackopsrepl/bf7838f8f365c77e36075ca301db298e) of Karpathy's gist.
+A complete, from-scratch GPT restructured as a reusable Rust crate. Scalar autograd engine, forward pass, Adam optimizer, character-level tokenizer — all in `std` only.
 
 ---
 
@@ -204,9 +204,7 @@ The ~8x speedup comes from Rust's compiled performance vs Python's interpreter o
 
 ## Origin
 
-This project is based on [blackopsrepl's microgpt.rs](https://gist.github.com/blackopsrepl/bf7838f8f365c77e36075ca301db298e) — a faithful Rust port of Karpathy's [microgpt.py gist](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95), restructured as a modular library crate.
-
-An earlier version was based on [zeroclawgpt](https://github.com/rustystack/zeroclawgpt), which used analytical gradients (~4,580x faster) but diverged from the gist on 8 parameters. That code is preserved on the `archive/zeroclawgpt` branch. See [docs/gist-conformance.md](docs/gist-conformance.md) for the full audit.
+Faithful Rust port of Karpathy's [microgpt.py gist](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95), restructured as a modular library crate. See [docs/gist-conformance.md](docs/gist-conformance.md) for the conformance audit.
 
 ---
 
@@ -217,7 +215,7 @@ This crate is the Rust core for the [mon-atelier-ia](https://github.com/mon-atel
 | Target | Approach | Status |
 |--------|----------|--------|
 | Library restructuring | Modular crate from gist | Done |
-| Gist conformance | Migrate from zeroclawgpt to blackopsrepl | Done |
+| Gist conformance | Scalar autograd, faithful to gist | Done |
 | WASM bindings | `wasm-bindgen` / `wasm-pack` sub-crate | Planned |
 | Android bindings | UniFFI or JNI sub-crate | Planned |
 | French datasets | Port from microgpt-ts-fr | Planned |
@@ -235,5 +233,5 @@ See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 ---
 
 <p align="center">
-  Based on <a href="https://gist.github.com/blackopsrepl/bf7838f8f365c77e36075ca301db298e">blackopsrepl/microgpt.rs</a>, structured by <a href="https://github.com/mon-atelier-ia">mon-atelier-ia</a>
+  Built by <a href="https://github.com/mon-atelier-ia">mon-atelier-ia</a> — based on <a href="https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95">Karpathy's microgpt.py</a>
 </p>
