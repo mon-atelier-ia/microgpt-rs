@@ -10,7 +10,7 @@ A complete, from-scratch GPT restructured as a reusable Rust crate. Scalar autog
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) (1.56+ for edition 2021)
+- [Rust](https://rustup.rs/) (1.85+ for edition 2024)
 
 ### Run the demo
 
