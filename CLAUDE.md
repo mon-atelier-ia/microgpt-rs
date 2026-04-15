@@ -112,3 +112,8 @@ This crate is part of the [mon-atelier-ia](https://github.com/mon-atelier-ia) ed
 | [microgpt-anime](https://github.com/mon-atelier-ia/microgpt-anime) | TypeScript | Animated explainer | -- |
 
 The Rust core will compile to WASM (web) and Android (NDK/UniFFI) to replace the TS engine in both sibling projects.
+
+
+## Wiki
+
+Syntheses wiki : `C:\Dev\wiki\topics\ia\` (subdomain microgpt) et `C:\Dev\wiki\entities\microgpt-rs.md`
